@@ -8,7 +8,8 @@ module Readability
       :min_text_length => 25,
       :remove_unlikely_candidates => true,
       :weight_classes => true,
-      :clean_conditionally => true
+      :clean_conditionally => true,
+      :encoding => nil
     }.freeze
 
     attr_accessor :options, :html
@@ -19,24 +20,65 @@ module Readability
       @remove_unlikely_candidates = @options[:remove_unlikely_candidates]
       @weight_classes = @options[:weight_classes]
       @clean_conditionally = @options[:clean_conditionally]
+      @encoding = @options[:encoding]
       make_html
     end
 
     def make_html
-      @html = Nokogiri::HTML(@input, nil, 'UTF-8')
+      @html = Nokogiri::HTML(@input, nil, @encoding)
     end
 
     REGEXES = {
-        :unlikelyCandidatesRe => /combx|comment|community|disqus|extra|foot|header|menu|remark|rss|shoutbox|sidebar|sponsor|ad-break|agegate|pagination|pager|popup/i,
-        :okMaybeItsACandidateRe => /and|article|body|column|main|shadow/i,
+
+      # The following are checked for in class / id / name
+      :unlikelyCandidatesRe => /
+      combx
+      |comment
+      |community
+      |disqus
+      |extra
+      |foot
+      |header
+      |menu
+      |remark
+      |rss
+      |share
+      |shoutbox
+      |sidebar
+      |sponsor
+      |ad-break
+      |agegate
+      |pagination
+      |pager
+      |popup
+      /ix,
+
+        # The following are kept regardless of the previous regex of unlikelyCandidates
+        :okMaybeItsACandidateRe => /
+        and
+      |article
+      |body
+      |column
+      |main
+      |shadow
+      /ix,
+
         :positiveRe => /article|body|content|entry|hentry|main|page|pagination|post|text|blog|story/i,
+
         :negativeRe => /combx|comment|com-|contact|foot|footer|footnote|masthead|media|meta|outbrain|promo|related|scroll|shoutbox|sidebar|sponsor|shopping|tags|tool|widget/i,
+
         :divToPElementsRe => /<(a|blockquote|dl|div|img|ol|p|pre|table|ul)/i,
+
         :replaceBrsRe => /(<br[^>]*>[ \n\r\t]*){2,}/i,
+
         :replaceFontsRe => /<(\/?)font[^>]*>/i,
+
         :trimRe => /^\s+|\s+$/,
+
         :normalizeRe => /\s{2,}/,
+
         :killBreaksRe => /(<br\s*\/?>(\s|&nbsp;?)*){1,}/,
+
         :videoRe => /http:\/\/(www\.)?(youtube|vimeo)\.com/i
     }
 
@@ -201,9 +243,8 @@ module Readability
 
     def remove_unlikely_candidates!
       @html.css("*").each do |elem|
-        str = "#{elem[:class]}#{elem[:id]}"
+        str = "#{elem[:class]}#{elem[:id]}#{elem[:name]}"
         if str =~ REGEXES[:unlikelyCandidatesRe] && str !~ REGEXES[:okMaybeItsACandidateRe] && elem.name.downcase != 'body'
-          debug("Removing unlikely candidate - #{str}")
           elem.remove
         end
       end
@@ -219,12 +260,12 @@ module Readability
           end
         else
           # wrap text nodes in p tags
-#          elem.children.each do |child|
-#            if child.text?
-##              debug("wrapping text node with a p")
-#              child.swap("<p>#{child.text}</p>")
-#            end
-#          end
+          #          elem.children.each do |child|
+          #            if child.text?
+          ##              debug("wrapping text node with a p")
+          #              child.swap("<p>#{child.text}</p>")
+          #            end
+          #          end
         end
       end
     end
@@ -263,15 +304,6 @@ module Readability
         # If element is in whitelist, delete all its attributes
         if whitelist[el.node_name]
           el.attributes.each { |a, x| el.delete(a) unless @options[:attributes] && @options[:attributes].include?(a.to_s) }
-
-          # Otherwise, replace the element with its contents
-        else
-          if replace_with_whitespace[el.node_name]
-            # Adding &nbsp; here, because swap removes regular spaaces
-            el.swap('&nbsp;' << el.text << '&nbsp;')
-          else
-            el.swap(el.text)
-          end
         end
 
       end
